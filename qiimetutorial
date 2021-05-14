@@ -1,3 +1,0 @@
-qrsh -l h_data=8G
-module load python/anaconda2
-source activate qiime2-2019.7
