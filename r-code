@@ -1,0 +1,85 @@
+#install packages
+install.packages("ggplot2")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("phyloseq")
+install.packages("ape")
+
+#load libraries
+library("ggplot2")
+library("phyloseq")
+library("ape")
+
+#set working directory
+setwd("/Users/kritishukla/Documents/UCLA/barberlab/phyloseq")
+
+#read in otu table
+otu_table = read.csv("kritiotu.csv", sep=",", row.names=1, header=TRUE)
+otu_table = as.matrix(otu_table)
+
+#remove random x’s from OTU
+destroyX = function(es) {
+  f = es
+  for (col in c(1:ncol(f))){ #for each column in dataframe
+    if (startsWith(colnames(f)[col], "X") == TRUE)  { #if starts with 'X' ..
+      colnames(f)[col] <- substr(colnames(f)[col], 2, 100) #get rid of it
+    }
+  }
+  assign(deparse(substitute(es)), f, inherits = TRUE) #assign corrected data to original name
+}
+
+destroyX(otu_table)
+
+# read in taxonomy, separated by kingdom phylum class order family genus species
+taxonomy = read.csv("krititax.csv", sep=",", row.names=1, header=TRUE)
+taxonomy = as.matrix(taxonomy)
+
+# read in metadata
+metadata = read.table("kritimeta.csv", header=TRUE, fill=TRUE, sep=",", row.names=1, quote="")
+
+# read in tree
+phy_tree = read_tree("tree.nwk")
+
+# import as phyloseq objects
+OTU = otu_table(otu_table, taxa_are_rows = TRUE)
+TAX = tax_table(taxonomy)
+META = sample_data(metadata)
+
+# check that your OTU names are consistent across objects
+taxa_names(TAX)
+taxa_names(OTU)
+taxa_names(phy_tree)
+
+# make sure files have the same sample names
+sample_names(OTU)
+sample_names(META)
+
+# merge into one phyloseq object
+physeq = phyloseq(OTU, TAX, META, phy_tree)
+
+#preprocessing data in R
+filterps = filter_taxa(physeq, function(x) sum(x > 3) > (0.01*length(x)), TRUE)
+mergeps = merge_samples(filterps, "Diet")
+transps = transform_sample_counts(mergeps, function(x) x / sum(x) )
+my_plot_bar = function (physeq, x = "Sample", y = "Abundance", fill = NULL, title = NULL, 
+                        facet_grid = NULL) {
+    mdf = psmelt(physeq)
+    p = ggplot(mdf, aes_string(x = x, y = y, fill = fill))
+    p = p + geom_bar(stat = "identity", position = "stack")
+    p = p + theme(axis.text.x = element_text(angle = -90, hjust = 0))
+    if (!is.null(facet_grid)) {
+        p <- p + facet_grid(facet_grid)
+    }
+    if (!is.null(title)) {
+        p <- p + ggtitle(title)
+    }
+    return(p)
+}
+title = "Phyla"
+plot = my_plot_bar(transps, "Sample", "Abundance", "Phylum", title=title)
+plot <- plot + labs(x = "Diet", y = "Abundance")
+plot <- plot + scale_fill_manual(values = c("#4c9ad1", "#d85a2e", "#51be4a", "#5969cc", "#9e5dce", "#8bbb44", 
+  "#cc54b3", "#38c481", "#dda15e", "#458a35", "#FF3500", "#45c7c8", "#de942f", "#8787cd", "#bcb137"))
+plot
