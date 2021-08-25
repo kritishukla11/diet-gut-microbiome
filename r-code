@@ -7,10 +7,15 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install("phyloseq")
 install.packages("ape")
 
+BiocManager::install("limma")
+install.packages("limma")
+
 #load libraries
 library("ggplot2")
 library("phyloseq")
 library("ape")
+library("limma")
+library("plyr")
 
 #set working directory
 setwd("/Users/kritishukla/Documents/UCLA/barberlab/phyloseq")
@@ -63,6 +68,8 @@ physeq = phyloseq(OTU, TAX, META, phy_tree)
 filterps = filter_taxa(physeq, function(x) sum(x > 3) > (0.01*length(x)), TRUE)
 mergeps = merge_samples(filterps, "Diet")
 transps = transform_sample_counts(mergeps, function(x) x / sum(x) )
+
+#plotting function
 my_plot_bar = function (physeq, x = "Sample", y = "Abundance", fill = NULL, title = NULL, 
                         facet_grid = NULL) {
     mdf = psmelt(physeq)
@@ -77,9 +84,53 @@ my_plot_bar = function (physeq, x = "Sample", y = "Abundance", fill = NULL, titl
     }
     return(p)
 }
+
+#taxa barplot
 title = "Phyla"
 plot = my_plot_bar(transps, "Sample", "Abundance", "Phylum", title=title)
 plot <- plot + labs(x = "Diet", y = "Abundance")
 plot <- plot + scale_fill_manual(values = c("#4c9ad1", "#d85a2e", "#51be4a", "#5969cc", "#9e5dce", "#8bbb44", 
   "#cc54b3", "#38c481", "#dda15e", "#458a35", "#FF3500", "#45c7c8", "#de942f", "#8787cd", "#bcb137"))
+plot <- plot + theme_bw()
+plot <- plot + scale_x_discrete(labels = c('Carnivore','Herbivore'))
+plot <- plot + theme(text = element_text(size = 20))
 plot
+
+#alpha diversity plot
+plot_alphahost = plot_richness(physeq, measures=c("Shannon"), x="Name", color="Name")
+plot_alphahost <- plot_alphahost + geom_boxplot()
+plot_alphahost <- plot_alphahost + theme_bw()
+plot_alphahost <- plot_alphahost + theme(text = element_text(size = 20))
+plot_alphahost <- plot_alphahost + scale_fill_discrete(name = "Host")
+plot_alphahost <- plot_alphahost + labs(fill = "Host")
+plot_alphahost = plot_alphahost + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+plot_alphahost = plot_alphahost + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+plot_alphahost
+
+#deseq analysis
+Deseq2_physeq_Phylum <- taxa_level(physeq, "Phylum")
+Deseq2_physeq_Phylum_sig <- differential_abundance(Deseq2_physeq_Phylum, grouping_column = “Diet”, output_norm = "log-relative", pvalue.threshold = 0.05, lfc.threshold = 0, filename = "Deseq_physeq_Phylum_3-27-2020.csv")
+print(Deseq2_physeq_Phylum_sig, max.print=100000)
+plotsig <- plot_signif(Deseq2_physeq_Phylum_sig$plotdata, top.taxa = 10,lfcplot=TRUE)
+print(plotsig)
+plotsig <- plot_signif(Deseq2_physeq_Phylum_sig$plotdata, top.taxa = 10,lfcplot=TRUE)
+print(plotsig)
+
+#pcoaplot
+pco$data$Vectors %>%
+  rename("#SampleID"=SampleID) %>% #rename to match the metadata table
+  left_join(metadata) %>%
+  left_join(shannon$data %>% rownames_to_column("#SampleID")) %>%
+  ggplot(aes(x=PC1, y=PC2, shape=Subject, color=BodySite, size=shannon)) +
+  geom_point() +
+  xlab(paste("PC1: ", round(100*pco$data$ProportionExplained[1]), "%")) +
+  ylab(paste("PC2: ", round(100*pco$data$ProportionExplained[2]), "%")) +
+  theme_bw() +
+  ggtitle("Unweighted UniFrac")+
+  stat_ellipse()
+
+
+ 
+ 
+
+
